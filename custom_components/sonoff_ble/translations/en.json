@@ -33,5 +33,21 @@
       "s6_double": "S6 Double Press",
       "s6_long": "S6 Long Press"
     }
+  },
+  "entity": {
+    "event": {
+      "button": {
+        "name": "Button {number}",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "short": "Short press",
+              "double": "Double press",
+              "long": "Long press"
+            }
+          }
+        }
+      }
+    }
   }
 }
