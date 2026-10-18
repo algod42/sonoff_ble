@@ -14,12 +14,7 @@ from .const import (
     EVENT_DOMAIN,
     SWITCHES,
     ACTIONS,
-    SWITCH_1,
-    SWITCH_2,
-    SWITCH_3,
-    ACTION_SHORT,
-    DEVICE_R5,
-    DEVICE_SMATE,
+    DEVICE_BUTTONS,
 )
 from .util import event_type
 
@@ -27,12 +22,10 @@ from .util import event_type
 ALL_TRIGGERS = [event_type(switch, action) for switch in SWITCHES for action in ACTIONS]
 
 TRIGGERS = {
-    # R5 supports all 6 switches and all 3 actions
-    DEVICE_R5: ALL_TRIGGERS,
-    # S-Mate supports 3 switches and short press action only
-    DEVICE_SMATE: [
-        event_type(switch, ACTION_SHORT) for switch in [SWITCH_1, SWITCH_2, SWITCH_3]
-    ],
+    device_type: [
+        event_type(switch, action) for switch in switches for action in actions
+    ]
+    for device_type, (switches, actions) in DEVICE_BUTTONS.items()
 }
 
 TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(

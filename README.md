@@ -56,9 +56,9 @@ A Home Assistant custom integration for using Sonoff BLE devices without the nee
 
 ## Usage
 
-Once a device is discovered and added, you can create automations using the device as a trigger. 
+Once a device is discovered and added, it gets an event entity for every button, for example `event.switchman_r5_bab7cb_button_1`. Its `event_type` attribute is `short`, `double` or `long`, so presses are shown in the history and logbook and can be used as automation triggers ("By target" in the automation editor) or on dashboards.
 
-Each device provides the following triggers:
+Each device also provides the following device triggers, and every press fires a `sonoff_ble_event` event with the device id and trigger type:
 
 | Trigger Type | Description |
 |--------------|-------------|

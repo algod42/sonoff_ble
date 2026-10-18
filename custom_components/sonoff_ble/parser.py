@@ -15,6 +15,7 @@ from homeassistant.config_entries import SOURCE_BLUETOOTH, ConfigEntry
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceEntry
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import (
@@ -27,6 +28,7 @@ from .const import (
     DOMAIN,
     EVENT_DOMAIN,
     MAC_ADDRESS,
+    SIGNAL_PRESS,
     SWITCH_1,
     SWITCH_2,
     SWITCH_3,
@@ -223,6 +225,7 @@ class SonoffBLEParser:
                 "type": event_type(device_info["switch"], device_info["action"]),
             },
         )
+        async_dispatcher_send(self.hass, SIGNAL_PRESS, device_info)
 
     @staticmethod
     def _decrypt(input_bytes: bytes) -> bytes:

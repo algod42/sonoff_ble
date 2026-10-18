@@ -32,3 +32,12 @@ ACTIONS: Final = [ACTION_SHORT, ACTION_DOUBLE, ACTION_LONG]
 CONF_COORDINATOR: Final = "coordinator"
 DEFAULT_SCAN_INTERVAL: Final = 60
 MIN_SCAN_INTERVAL: Final = 10
+
+# Buttons and actions per device type
+DEVICE_BUTTONS: Final = {
+    DEVICE_R5: (SWITCHES, ACTIONS),
+    DEVICE_SMATE: ([SWITCH_1, SWITCH_2, SWITCH_3], [ACTION_SHORT]),
+}
+
+# Dispatcher signal for decoded button presses
+SIGNAL_PRESS: Final = f"{DOMAIN}_press"

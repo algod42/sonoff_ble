@@ -15,6 +15,8 @@ from .parser import SonoffBLEParser
 
 _LOGGER = logging.getLogger(__name__)
 
+PLATFORMS = [Platform.EVENT]
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     parser = SonoffBLEParser(hass, entry)
@@ -27,6 +29,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             update_method=parser.update,
         )
     )
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # only start after all platforms have had a chance to subscribe
     entry.async_on_unload(coordinator.async_start())
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
