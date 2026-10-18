@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections import Counter
 import logging
+import re
 from typing import Any
 
 import homeassistant.helpers.device_registry as dr
@@ -36,6 +38,9 @@ from .util import event_type
 
 _LOGGER = logging.getLogger(__name__)
 
+# 5A <counter> 90 <device type>
+TYPE_UUID = re.compile(r"^5A[0-9A-F]{2}90(46|47)$")
+
 
 class SonoffBLEParser:
     """Parser for Sonoff BLE device advertisements."""
@@ -44,6 +49,11 @@ class SonoffBLEParser:
         """Initialize the parser."""
         self.hass = hass
         self.entry = entry
+        # BlueZ caches service UUIDs per address and merges every new
+        # advertisement into that cache, so the list keeps growing and its
+        # order is not stable. Remember what was already there to find the
+        # UUIDs belonging to the latest advertisement.
+        self._seen_uuids: set[str] = set()
 
     @callback
     def update(
@@ -63,25 +73,40 @@ class SonoffBLEParser:
 
     def _process_advertisement(self, service_info: BluetoothServiceInfoBleak) -> None:
         """Process the BLE advertisement data."""
-        uuids = service_info.service_uuids
-        _LOGGER.debug(
-            "Received %d UUIDs: %s", len(uuids), [uuid.split("-")[0] for uuid in uuids]
-        )
+        uuids = [uuid.split("-")[0].upper() for uuid in service_info.service_uuids]
+        _LOGGER.debug("Received %d UUIDs: %s", len(uuids), uuids)
 
-        # Validate UUID count
-        if len(uuids) < 6:
-            _LOGGER.debug("Insufficient UUIDs: %d, expected at least 6", len(uuids))
-            return
+        current = set(uuids)
+        if not self._seen_uuids <= current:
+            # BlueZ dropped the device and its cache, start over
+            self._seen_uuids = set()
+        new_uuids = [uuid for uuid in uuids if uuid not in self._seen_uuids]
+        self._seen_uuids = current
 
         # Validate BEEF prefix
-        beef_data = "".join([uuid.split("-")[0] for uuid in uuids[0:2]]).upper()
-        if beef_data != BEEF_ID:
-            _LOGGER.debug("Invalid BEEF prefix: %s, expected: %s", beef_data, BEEF_ID)
+        beef_uuids = (BEEF_ID[:8], BEEF_ID[8:])
+        if not all(uuid in current for uuid in beef_uuids):
+            _LOGGER.debug("BEEF prefix %s not found", BEEF_ID)
+            return
+
+        # Each button press adds up to 4 new UUIDs: device type, device id and
+        # 2 encrypted ones. Type and id carry a 1 byte counter, so once the
+        # cache holds their variants they are not new anymore.
+        payload = [uuid for uuid in new_uuids if uuid not in beef_uuids]
+        if not payload or len(payload) > 4:
+            _LOGGER.debug(
+                "Ignoring %d new UUIDs (first advertisement or duplicate)",
+                len(payload),
+            )
             return
 
         # Process data
         try:
-            device_info = self._parse_advertisement_data(uuids)
+            if len(uuids) == 6 and tuple(uuids[0:2]) == beef_uuids:
+                # Fresh cache, the advertisement order is still intact
+                device_info = self._parse_advertisement_data(uuids)
+            else:
+                device_info = self._parse_new_uuids(payload, current)
             if device_info:
                 # Get or create device entry
                 device = dr.async_get(self.hass).async_get_or_create(
@@ -96,6 +121,64 @@ class SonoffBLEParser:
 
         except ValueError as err:
             _LOGGER.warning("Failed to parse advertisement data: %s", err)
+
+    def _parse_new_uuids(
+        self, payload: list[str], cached: set[str]
+    ) -> dict[str, Any] | None:
+        """Parse the new UUIDs, whose order BlueZ does not preserve."""
+        # The device id is in the last 3 bytes of every id UUID, so it is
+        # repeated in the cache
+        suffixes = Counter(uuid[2:] for uuid in cached)
+        known_ids = {suffix for suffix, count in suffixes.items() if count > 1}
+
+        def is_type(uuid: str) -> bool:
+            return TYPE_UUID.match(uuid) is not None
+
+        def is_id(uuid: str) -> bool:
+            return uuid[2:] in known_ids and not is_type(uuid)
+
+        type_uuids = [uuid for uuid in payload if is_type(uuid)]
+        id_uuids = [uuid for uuid in payload if is_id(uuid)]
+        encrypted = [
+            uuid for uuid in payload if uuid not in type_uuids + id_uuids
+        ]
+
+        # Not new, take them from the cache
+        if not type_uuids:
+            type_uuids = [uuid for uuid in cached if is_type(uuid)]
+        if not id_uuids:
+            id_uuids = [uuid for uuid in cached if is_id(uuid)]
+
+        device_types = {uuid[6:] for uuid in type_uuids}
+        device_ids = {uuid[2:] for uuid in id_uuids}
+        if len(device_types) != 1 or len(device_ids) != 1 or not encrypted:
+            raise ValueError(f"Cannot decode UUIDs {payload}")
+
+        # Only the first encrypted UUID carries the action and switch
+        results = []
+        for first in encrypted:
+            second = next((uuid for uuid in encrypted if uuid != first), "0" * 8)
+            try:
+                device_info = self._parse_advertisement_data(
+                    [
+                        BEEF_ID[:8],
+                        BEEF_ID[8:],
+                        type_uuids[0],
+                        id_uuids[0],
+                        first,
+                        second,
+                    ]
+                )
+            except ValueError:
+                continue
+            if device_info not in results:
+                results.append(device_info)
+
+        if len(results) != 1:
+            raise ValueError(
+                f"Cannot decode UUIDs {payload}: {len(results)} valid results"
+            )
+        return results[0]
 
     def _parse_advertisement_data(self, uuids: list[str]) -> dict[str, Any] | None:
         """Parse the advertisement data and return device info."""

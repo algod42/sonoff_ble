@@ -64,7 +64,7 @@ Each device provides the following triggers:
 |--------------|-------------|
 | Switch N Short Press | Single quick press of switch button |
 | Switch N Double Press | Two quick presses of switch button |
-| Switch N Long Press | Hold button for 2+ seconds |
+| Switch N Long Press | Hold button for 2+ seconds, fires repeatedly (about every 0.35 s) while held |
 
 The **S-MATE** Has three "buttons" (marked on the device as S1-S3).
 
@@ -77,14 +77,18 @@ The **R5** Has six buttons and supports all three trigger types. Buttons are in 
   │                     │
   │                     │
   │                     │
-  │  [3]    [5]    [6]  │
+  │  [4]    [5]    [6]  │
   │                    S│ <- Logo
   └─────────────────────┘
 ```
 
 ## Known Issues
 
-When sending a lot of events in a short time, some of the events might be discarded. This is caused by BlueZ UUID caching on all Linux devices.
+BlueZ (used on all Linux hosts) caches the service UUIDs of every advertisement from the shared `66:55:44:33:22:11` address in one growing list. The integration decodes only the UUIDs that are new in each advertisement, which works with that cache, but:
+
+- The first advertisement after Home Assistant starts is used to learn the cached UUIDs and might not fire an event.
+- Rarely, a repeated packet (for example during a long press) adds no new data and is ignored.
+- With several remotes in range, a press whose device id is already cached cannot be attributed to a remote and is ignored.
 
 ## License
 
