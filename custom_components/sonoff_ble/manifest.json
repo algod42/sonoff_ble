@@ -1,7 +1,7 @@
 {
   "domain": "sonoff_ble",
   "name": "Sonoff BLE",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "documentation": "https://github.com/ToraCZ/sonoff_ble",
   "issue_tracker": "https://github.com/ToraCZ/sonoff_ble/issues",
   "dependencies": [
